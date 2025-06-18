@@ -1,0 +1,26 @@
+[project]
+name = "test"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiofiles>=24.1.0",
+    "fastapi>=0.115.12",
+    "flask>=3.1.1",
+    "jwcrypto>=1.5.6",
+    "line-bot-sdk>=3.17.1",
+    "pyjwt>=2.10.1",
+    "python-dotenv>=1.1.0",
+    "python-multipart>=0.0.20",
+    "requests>=2.32.3",
+    "uvicorn>=0.34.3",
+    "pillow>=11.2.1",
+    "timm>=1.0.15",
+    "torch>=2.7.0",
+    "torchaudio>=2.7.0",
+    "torchvision>=0.22.0",
+]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 140
