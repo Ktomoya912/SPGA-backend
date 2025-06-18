@@ -19,8 +19,6 @@ from linebot.v3.webhooks import ImageMessageContent, MessageEvent
 from app.ai import predict_minimal
 
 load_dotenv()
-SAVE_DIR = "images"
-os.makedirs(SAVE_DIR, exist_ok=True)
 app = FastAPI()
 
 channel_secret = os.getenv("LINE_CHANNEL_SECRET", None)
@@ -37,7 +35,6 @@ api_client = ApiClient(configuration)
 line_bot_api_blob = MessagingApiBlob(api_client)
 line_bot_api = MessagingApi(api_client)
 handler = WebhookHandler(channel_secret)
-# 画像保存用ディレクトリ作成
 
 
 @app.post("/callback")
@@ -75,7 +72,7 @@ def handle_message(event: MessageEvent):
 def handle_image(event):
     # 画像を保存
     message_id = event.message.id
-    response = line_bot_api_blob.get_message_content(message_id)
+    content = line_bot_api_blob.get_message_content(message_id)
 
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
@@ -88,14 +85,10 @@ def handle_image(event):
         )
     )
 
-    result = predict_minimal(response)
+    result = predict_minimal(content)
     line_bot_api.push_message_with_http_info(
         push_message_request=PushMessageRequest(
             to=event.source.user_id,
             messages=[TextMessage(text=f"予測結果: (ID: {result})")],
         )
     )
-
-
-if __name__ == "__main__":
-    pass
