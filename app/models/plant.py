@@ -1,7 +1,15 @@
-from sqlmodel import Field, SQLModel
+from typing import TYPE_CHECKING
+
+from sqlmodel import Field, Relationship
+
+from app import db
+
+if TYPE_CHECKING:
+    from app.models.registed import Registed
+    from app.models.watering import Watering
 
 
-class PlantBase(SQLModel):
+class PlantBase(db.BaseModel, table=True):
     id: int = Field(
         description="植物ID, 機械学習の結果と一致している必要がある。", primary_key=True
     )
@@ -23,3 +31,9 @@ class PlantBase(SQLModel):
 
 class Plant(PlantBase, table=True):
     __tablename__ = "plants"
+    registed_plants: list["Registed"] = Relationship(
+        back_populates="plant", sa_relationship_kwargs={"lazy": "joined"}
+    )
+    waterings: list["Watering"] = Relationship(
+        back_populates="plant", sa_relationship_kwargs={"lazy": "joined"}
+    )

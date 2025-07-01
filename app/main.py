@@ -2,7 +2,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
@@ -10,13 +10,81 @@ from linebot.v3.messaging import (
     Configuration,
     MessagingApi,
     MessagingApiBlob,
-    PushMessageRequest,
     ReplyMessageRequest,
     TextMessage,
 )
 from linebot.v3.webhooks import ImageMessageContent, MessageEvent
+from sqlmodel import Session, select
 
+from app import db, models
 from app.ai import predict_minimal
+
+
+def register(db: Session, plant_id: int, device_id: int = None):
+    registed = db.exec(
+        select(models.Registed).where(
+            models.Registed.plant_id == plant_id,
+            models.Registed.device_id == device_id if device_id else None,
+        )
+    ).first()
+    if registed is None:
+        new_registed = models.Registed(plant_id=plant_id, device_id=device_id)
+        db.add(new_registed)
+        db.commit()
+        return True
+    else:
+        return False
+
+
+class RequestState:
+    def __init__(self):
+        self.start_registing = False
+        self.predict_result = None
+
+    def parse_message(self, message: str, db: Session):
+        if "登録" in message:
+            return self.start_regist()
+        elif self.predict_result:
+            return self.regist_plant(message, db)
+
+    def start_regist(self):
+        if not self.start_registing:
+            self.start_registing = True
+            return {"error": False, "text": "画像を送信してください。"}
+        else:
+            return {
+                "error": True,
+                "text": "すでに登録を開始しています。画像を送信してください。",
+            }
+
+    def regist_plant(self, message: str, db: Session):
+        if "はい" in message or "yes" == message.lower():
+            self.start_registing = False
+            # ここで予測結果を登録する処理を実行
+            if not register(db, self.predict_result):
+                self.predict_result = None
+                return {
+                    "error": True,
+                    "text": "登録に失敗しました。もう一度送信してください。",
+                }
+            self.predict_result = None
+            return {
+                "error": False,
+                "text": "登録が完了しました。",
+            }
+        elif "いいえ" in message or "no" == message.lower():
+            self.start_registing = False
+            self.predict_result = None
+            return {
+                "error": False,
+                "text": "登録をキャンセルしました。",
+            }
+        else:
+            return {
+                "error": True,
+                "text": "登録の確認ができませんでした。もう一度送信してください。",
+            }
+
 
 load_dotenv()
 app = FastAPI()
@@ -35,6 +103,7 @@ api_client = ApiClient(configuration)
 line_bot_api_blob = MessagingApiBlob(api_client)
 line_bot_api = MessagingApi(api_client)
 handler = WebhookHandler(channel_secret)
+rs = RequestState()
 
 
 @app.post("/callback")
@@ -54,10 +123,10 @@ async def handle_callback(request: Request):
 
 
 @handler.add(MessageEvent)
-def handle_message(event: MessageEvent):
+def handle_message(event: MessageEvent, db: Session = Depends(db.get_db)):
     # テキストメッセージを受け取ったときの処理
     text = event.message.text
-    reply_text = f"受け取ったメッセージ: {text}"
+    reply_text = rs.parse_message(text, db)
 
     # LINEに返信
     line_bot_api.reply_message_with_http_info(
@@ -69,26 +138,28 @@ def handle_message(event: MessageEvent):
 
 
 @handler.add(MessageEvent, message=ImageMessageContent)
-def handle_image(event):
+def handle_image(event, db: Session = Depends(db.get_db)):
     # 画像を保存
     message_id = event.message.id
     content = line_bot_api_blob.get_message_content(message_id)
 
+    result = predict_minimal(content)
+    db_plant = db.exec(select(models.Plant).where(models.Plant.id == result)).first()
+    if db_plant is None:
+        reply_msg = "予測結果の植物がデータベースに存在しません。"
+    else:
+        rs.predict_result = db_plant.id
+        reply_msg = f"予測結果: {db_plant.name_jp}\n登録する場合は「はい」と送信してください。登録しない場合は「いいえ」と送信してください。"
+
     line_bot_api.reply_message_with_http_info(
         ReplyMessageRequest(
             reply_token=event.reply_token,
-            messages=[
-                TextMessage(
-                    text="画像を受け取りました。現在画像の処理を行っています..."
-                )
-            ],
+            messages=[TextMessage(text=reply_msg)],
         )
     )
-
-    result = predict_minimal(content)
-    line_bot_api.push_message_with_http_info(
-        push_message_request=PushMessageRequest(
-            to=event.source.user_id,
-            messages=[TextMessage(text=f"予測結果: (ID: {result})")],
-        )
-    )
+    # line_bot_api.push_message_with_http_info(
+    #     push_message_request=PushMessageRequest(
+    #         to=event.source.user_id,
+    #         messages=[TextMessage(text=f"予測結果: (ID: {result})")],
+    #     )
+    # )
