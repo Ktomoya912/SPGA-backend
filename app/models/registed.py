@@ -9,18 +9,18 @@ if TYPE_CHECKING:
     from app.models.plant import Plant
 
 
-class RegistedBase(db.BaseModel, table=True):
+class RegistedBase(db.BaseModel):
     id: int = Field(
         primary_key=True,
         description="登録ID, 一意の識別子として使用される。",
     )
     plant_id: int = Field(
-        description="植物ID, 機械学習の結果と一致している必要がある。"
+        description="植物ID, 機械学習の結果と一致している必要がある。",
+        foreign_key="plants.id",
     )
     device_id: int = Field(
         description="デバイスID",
         foreign_key="devices.id",
-        nullable=False,
     )
 
 

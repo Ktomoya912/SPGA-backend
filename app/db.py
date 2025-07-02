@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from dotenv import load_dotenv
-from sqlmodel import Column, Field, Session, SQLModel, create_engine
+from sqlmodel import Field, Session, SQLModel, create_engine
 
 load_dotenv()
 
@@ -18,7 +18,7 @@ class BaseModel(SQLModel):
     )
     updated_at: datetime = Field(
         default_factory=datetime.now,
-        sa_column=Column(datetime, onupdate=datetime.now, nullable=False, index=True),
+        sa_column_kwargs={"onupdate": datetime.now},
     )
 
 
@@ -28,4 +28,6 @@ def get_db():
 
 
 def create_db_and_tables():
+    from app import models  # noqa: F401
+
     SQLModel.metadata.create_all(engine)

@@ -11,8 +11,9 @@ if TYPE_CHECKING:
 class WateringBase(db.BaseModel):
     id: int = Field(description="水やりID", primary_key=True)
     plant_id: int = Field(description="植物ID", foreign_key="plants.id")
-    date: str = Field(description="水やり日付")
-    amount: float = Field(description="水の量 (ml)")
+    month: str = Field(description="対象月")
+    frequency: str = Field(description="水やり頻度")
+    amount: str = Field(description="水やり量")
 
 
 class Watering(WateringBase, table=True):

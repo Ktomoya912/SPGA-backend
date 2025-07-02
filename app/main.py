@@ -2,7 +2,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
@@ -41,11 +41,12 @@ class RequestState:
         self.start_registing = False
         self.predict_result = None
 
-    def parse_message(self, message: str, db: Session):
-        if "登録" in message:
-            return self.start_regist()
-        elif self.predict_result:
-            return self.regist_plant(message, db)
+    def parse_message(self, message: str):
+        with Session(db.engine) as session:
+            if "登録" in message:
+                return self.start_regist()
+            elif self.predict_result:
+                return self.regist_plant(message, session)
 
     def start_regist(self):
         if not self.start_registing:
@@ -86,8 +87,13 @@ class RequestState:
             }
 
 
+async def lifespan(app: FastAPI):
+    db.create_db_and_tables()
+    yield
+
+
 load_dotenv()
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 channel_secret = os.getenv("LINE_CHANNEL_SECRET", None)
 channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", None)
@@ -123,10 +129,10 @@ async def handle_callback(request: Request):
 
 
 @handler.add(MessageEvent)
-def handle_message(event: MessageEvent, db: Session = Depends(db.get_db)):
+def handle_message(event: MessageEvent):
     # テキストメッセージを受け取ったときの処理
     text = event.message.text
-    reply_text = rs.parse_message(text, db)
+    reply_text = rs.parse_message(text)
 
     # LINEに返信
     line_bot_api.reply_message_with_http_info(
@@ -138,25 +144,28 @@ def handle_message(event: MessageEvent, db: Session = Depends(db.get_db)):
 
 
 @handler.add(MessageEvent, message=ImageMessageContent)
-def handle_image(event, db: Session = Depends(db.get_db)):
+def handle_image(event):
     # 画像を保存
-    message_id = event.message.id
-    content = line_bot_api_blob.get_message_content(message_id)
+    with Session(db.engine) as session:
+        message_id = event.message.id
+        content = line_bot_api_blob.get_message_content(message_id)
 
-    result = predict_minimal(content)
-    db_plant = db.exec(select(models.Plant).where(models.Plant.id == result)).first()
-    if db_plant is None:
-        reply_msg = "予測結果の植物がデータベースに存在しません。"
-    else:
-        rs.predict_result = db_plant.id
-        reply_msg = f"予測結果: {db_plant.name_jp}\n登録する場合は「はい」と送信してください。登録しない場合は「いいえ」と送信してください。"
+        result = predict_minimal(content)
+        db_plant = session.exec(
+            select(models.Plant).where(models.Plant.id == int(result))
+        ).first()
+        if db_plant is None:
+            reply_msg = "予測結果の植物がデータベースに存在しません。"
+        else:
+            rs.predict_result = db_plant.id
+            reply_msg = f"予測結果: {db_plant.name_jp}\n登録する場合は「はい」と送信してください。登録しない場合は「いいえ」と送信してください。"
 
-    line_bot_api.reply_message_with_http_info(
-        ReplyMessageRequest(
-            reply_token=event.reply_token,
-            messages=[TextMessage(text=reply_msg)],
+        line_bot_api.reply_message_with_http_info(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=reply_msg)],
+            )
         )
-    )
     # line_bot_api.push_message_with_http_info(
     #     push_message_request=PushMessageRequest(
     #         to=event.source.user_id,

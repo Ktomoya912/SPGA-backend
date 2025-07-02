@@ -9,20 +9,20 @@ if TYPE_CHECKING:
     from app.models.watering import Watering
 
 
-class PlantBase(db.BaseModel, table=True):
+class PlantBase(db.BaseModel):
     id: int = Field(
         description="植物ID, 機械学習の結果と一致している必要がある。", primary_key=True
     )
-    name_jp = Field(
+    name_jp: str = Field(
         default=None,
         description="日本語の植物名",
         unique=True,
     )
-    name_en = Field(
+    name_en: str = Field(
         description="英語の植物名",
         unique=True,
     )
-    description = Field(
+    description: str = Field(
         default=None,
         description="植物の説明",
         nullable=True,
