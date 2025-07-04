@@ -1,6 +1,7 @@
 from .device import Device, DeviceBase
 from .plant import Plant, PlantBase
 from .registed import Registed, RegistedBase
+from .user import User, UserBase
 from .watering import Watering, WateringBase
 
 __all__ = [
@@ -12,4 +13,6 @@ __all__ = [
     "RegistedBase",
     "Watering",
     "WateringBase",
+    "User",
+    "UserBase",
 ]

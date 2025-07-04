@@ -27,13 +27,19 @@ class PlantBase(db.BaseModel):
         description="植物の説明",
         nullable=True,
     )
+    previewImageUrl: str = Field(
+        default=None,
+        description="植物のプレビュー画像URL",
+        nullable=True,
+    )
+    originalContentUrl: str = Field(
+        default=None,
+        description="植物のオリジナルコンテンツURL",
+        nullable=True,
+    )
 
 
 class Plant(PlantBase, table=True):
     __tablename__ = "plants"
-    registed_plants: list["Registed"] = Relationship(
-        back_populates="plant", sa_relationship_kwargs={"lazy": "joined"}
-    )
-    waterings: list["Watering"] = Relationship(
-        back_populates="plant", sa_relationship_kwargs={"lazy": "joined"}
-    )
+    registed_plants: list["Registed"] = Relationship(back_populates="plant")
+    waterings: list["Watering"] = Relationship(back_populates="plant")

@@ -1,5 +1,6 @@
 import argparse
 import json
+import pickle
 import traceback
 from io import BytesIO
 from logging import getLogger
@@ -16,16 +17,11 @@ from app.utils import get_model
 set_logger()
 logger = getLogger(__name__)
 
-MODEL_WEIGHTS_FILE = Path(__file__).parent.parent / "xp1_weights_best_acc.tar"
-CLASS_NAMES_JSON_FILE = (
-    Path(__file__).parent.parent / "plantnet300K_species_id_2_name.json"
-)
-MODEL_ARCHITECTURE = "resnet18"
-NUM_CLASSES = 1081
-IMAGE_INPUT_SIZE = 256
-IMAGE_CROP_SIZE = 224
-MODEL_INIT_PRETRAINED_FLAG = True
-PREPROCESSING_USE_IMAGENET_NORM = True
+BASE_PATH = Path(__file__).parent.parent / "data"
+MODEL_WEIGHTS_FILE = BASE_PATH / "xp1_weights_best_acc.tar"
+PKL_PATH = BASE_PATH / "xp1.pkl"
+CLASS_NAMES_JSON_FILE = BASE_PATH / "new_plantnet300K_species_id_2_name.json"
+NUM_CLASSES = 8
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -35,6 +31,12 @@ if not MODEL_WEIGHTS_FILE.exists():
         "このファイルは、モデルの学習済み重みを含む必要があります。"
     )
     raise FileNotFoundError(MODEL_WEIGHTS_FILE)
+if not PKL_PATH.exists():
+    logger.error(
+        f"pklファイルが見つかりません: {PKL_PATH}. "
+        "このファイルは、モデルの設定やパラメータを含む必要があります。"
+    )
+    raise FileNotFoundError(PKL_PATH)
 if not CLASS_NAMES_JSON_FILE.exists():
     logger.error(
         f"クラス名のJSONファイルが見つかりません: {CLASS_NAMES_JSON_FILE}. "
@@ -45,17 +47,21 @@ if not CLASS_NAMES_JSON_FILE.exists():
 with open(CLASS_NAMES_JSON_FILE, "r", encoding="utf-8") as f:
     id_to_name_map: dict = json.load(f)
 
+with open(PKL_PATH, "rb") as f:
+    results = pickle.load(f)
+
+params = results["params"]
+model_name = params["model"]
+image_size = params["image_size"]
+crop_size = params["crop_size"]
+
 class_ids = list(id_to_name_map.keys())
 
-args_for_get_model = argparse.Namespace(
-    model=MODEL_ARCHITECTURE, pretrained=MODEL_INIT_PRETRAINED_FLAG
-)
+args_for_get_model = argparse.Namespace(model=model_name, pretrained=False)
 
 try:
     model = get_model(args_for_get_model, n_classes=NUM_CLASSES)
-    logger.info(
-        f"モデル '{MODEL_ARCHITECTURE}' を {NUM_CLASSES} クラスで初期化しました。"
-    )
+    logger.info(f"モデル '{model_name}' を {NUM_CLASSES} クラスで初期化しました。")
 except Exception as e:
     logger.error(f"モデルの初期化中にエラー (get_model): {e}")
     logger.error(traceback.format_exc())
@@ -111,22 +117,12 @@ except Exception as e:
 
 logger.info(f"デバイス '{device}' を使用します。")
 
-if PREPROCESSING_USE_IMAGENET_NORM:
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-    )
-else:
-    logger.warning(
-        "ImageNet標準でない正規化を使用します。学習時のパラメータと一致しているか確認してください。"
-    )
-    normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-
 preprocess = transforms.Compose(
     [
-        transforms.Resize(IMAGE_INPUT_SIZE),
-        transforms.CenterCrop(IMAGE_CROP_SIZE),
+        transforms.Resize(image_size),
+        transforms.CenterCrop(crop_size),
         transforms.ToTensor(),
-        normalize,
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ]
 )
 
@@ -173,4 +169,4 @@ def predict_minimal(
         )
 
     logger.info(f"確信度 (Softmax確率): {prediction_confidence:.4f}")
-    return predicted_id_str
+    return predicted_id_str, prediction_confidence

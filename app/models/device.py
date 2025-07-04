@@ -25,7 +25,6 @@ class DeviceBase(db.BaseModel):
 class Device(DeviceBase, table=True):
     __tablename__ = "devices"
 
-    registed_devices: list["Registed"] = Relationship(
+    plant: list["Registed"] = Relationship(
         back_populates="device",
-        sa_relationship_kwargs={"lazy": "joined"},
     )

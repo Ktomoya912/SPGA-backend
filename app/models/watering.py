@@ -20,6 +20,5 @@ class Watering(WateringBase, table=True):
     __tablename__ = "waterings"
 
     plant: "Plant" = Relationship(
-        sa_relationship_kwargs={"lazy": "joined"},
         back_populates="waterings",
     )
