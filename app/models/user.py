@@ -17,6 +17,10 @@ class UserBase(db.BaseModel):
         description="現在の予測結果",
         nullable=True,
     )
+    delete_mode: bool = Field(
+        default=False,
+        description="削除モードかどうか",
+    )
 
 
 class User(UserBase, table=True):

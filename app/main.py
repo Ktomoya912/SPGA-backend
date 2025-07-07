@@ -16,7 +16,7 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 from linebot.v3.webhooks import ImageMessageContent, MessageEvent
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
 from app import db, models
 from app.ai import predict_minimal
@@ -70,7 +70,38 @@ def handle_message(event: MessageEvent):
     text: str = event.message.text
     with Session(db.engine) as session:
         user = get_create_user(session, event.source.user_id)
-        if "登録" in text:
+        if user.delete_mode:
+            plant = session.exec(
+                select(models.Plant).where(
+                    or_(
+                        models.Plant.id == text,
+                        models.Plant.name_jp == text,
+                        models.Plant.name_en == text,
+                    )
+                )
+            ).first()
+            if "キャンセル" == text or "終了" == text:
+                user.delete_mode = False
+                session.add(user)
+                session.commit()
+                reply_text = "削除モードを終了しました。"
+            elif plant is None:
+                reply_text = "指定された植物は登録されていません。もう一度IDもしくは植物名を送信してください。"
+            else:
+                # 植物を削除
+                registed = session.exec(
+                    select(models.Registed).where(
+                        models.Registed.plant_id == plant.id,
+                        models.Registed.user_id == user.id,
+                    )
+                ).first()
+                reply_text = f"{plant.name_jp} (ID: {plant.id}) を削除しました。"
+                session.delete(registed)
+                session.commit()
+                user.delete_mode = False
+                session.add(user)
+                session.commit()
+        elif "登録" == text:
             reply_text = "登録を開始します。画像を送信してください。"
         elif "一覧" in text:
             # 登録済みの植物一覧を取得
@@ -81,17 +112,38 @@ def handle_message(event: MessageEvent):
                 reply_text = "登録済みの植物はありません。"
             else:
                 reply_text = "登録済みの植物一覧:\n"
-                for registed in registed_plants:
-                    plant = session.exec(
-                        select(models.Plant).where(models.Plant.id == registed.plant_id)
-                    ).first()
-                    reply_text += f"- {plant.name_jp} (ID: {plant.id})\n"
+                plant_list = [registed.plant for registed in registed_plants]
+                reply_text += "\n".join(
+                    f"- {plant.name_jp} (ID: {plant.id})" for plant in plant_list
+                )
+        elif "削除" == text:
+            registed_plants = session.exec(
+                select(models.Registed).where(models.Registed.user_id == user.id)
+            ).all()
+            if not registed_plants:
+                reply_text = "登録済みの植物はありません。"
+            else:
+                reply_text = "登録済みの植物一覧:\n"
+                plant_list = [registed.plant for registed in registed_plants]
+                reply_text += "\n".join(
+                    f"- {plant.name_jp} (ID: {plant.id})" for plant in plant_list
+                )
+                user.delete_mode = True
+                session.add(user)
+                session.commit()
+                reply_text += "\n削除モードに入りました。削除したい植物のIDもしくは植物名を送信してください。\n削除をキャンセルする場合は「キャンセル」もしくは「終了」と送信してください。"
+
         elif user.current_predict:
             if "はい" in text or "yes" == text.lower():
                 if not plant_regist(session, user.current_predict, user.id):
                     reply_text = "すでに登録済みの植物です。"
                 else:
-                    reply_text = "登録が完了しました。"
+                    plant = session.exec(
+                        select(models.Plant).where(
+                            models.Plant.id == user.current_predict
+                        )
+                    ).first()
+                    reply_text = f"登録が完了しました。\n\nこの植物の注意事項\n{plant.description}"
             elif "いいえ" in text or "no" == text.lower():
                 reply_text = "登録をキャンセルしました。"
             else:
