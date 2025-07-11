@@ -6,6 +6,8 @@ from app import db
 
 if TYPE_CHECKING:
     from app.models.registed import Registed
+    from app.models.notification_history import NotificationHistory 
+    from app.models.device import Device
 
 
 class UserBase(db.BaseModel):
@@ -27,5 +29,11 @@ class User(UserBase, table=True):
     __tablename__ = "users"
 
     registed_plants: list["Registed"] = Relationship(
+        back_populates="user",
+    )
+    notification_histories: list["NotificationHistory"] = Relationship(
+        back_populates="user"
+    )
+    devices: list["Device"] = Relationship(
         back_populates="user",
     )

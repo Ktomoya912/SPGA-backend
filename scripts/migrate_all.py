@@ -53,6 +53,8 @@ if __name__ == "__main__":
                 month=row["month"],
                 frequency=row["frequency"],
                 amount=row["quantity"],
+                humidity_when_dry=int(row["humidity_when_dry"]),
+                humidity_when_watered=int(row["humidity_when_watered"]),
             )
             session.add(watering)
         session.commit()

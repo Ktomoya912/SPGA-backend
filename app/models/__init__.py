@@ -3,6 +3,7 @@ from .plant import Plant, PlantBase
 from .registed import Registed, RegistedBase
 from .user import User, UserBase
 from .watering import Watering, WateringBase
+from .notification_history import NotificationHistory, NotificationHistoryBase
 
 __all__ = [
     "Device",
@@ -15,4 +16,6 @@ __all__ = [
     "WateringBase",
     "User",
     "UserBase",
+    "NotificationHistory",
+    "NotificationHistoryBase",
 ]

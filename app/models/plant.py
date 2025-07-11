@@ -7,6 +7,7 @@ from app import db
 if TYPE_CHECKING:
     from app.models.registed import Registed
     from app.models.watering import Watering
+    from app.models.notification_history import NotificationHistory 
 
 
 class PlantBase(db.BaseModel):
@@ -43,3 +44,6 @@ class Plant(PlantBase, table=True):
     __tablename__ = "plants"
     registed_plants: list["Registed"] = Relationship(back_populates="plant")
     waterings: list["Watering"] = Relationship(back_populates="plant")
+    notification_histories: list["NotificationHistory"] = Relationship(  # この行を追加
+        back_populates="plant"
+    )
