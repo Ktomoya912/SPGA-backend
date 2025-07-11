@@ -1,5 +1,6 @@
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
 
 from dotenv import load_dotenv
@@ -21,11 +22,15 @@ from sqlmodel import Session, or_, select
 from app import db, models
 from app.ai import predict_minimal
 from app.crud.utils import get_create_user, plant_regist
+from app.handler import handler as watch_handler
 
 
 async def lifespan(app: FastAPI):
     db.create_db_and_tables()
+    executor = ThreadPoolExecutor()
+    executor.submit(watch_handler, line_bot_api)
     yield
+    executor.shutdown(wait=True)
 
 
 load_dotenv()
