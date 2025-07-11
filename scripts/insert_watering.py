@@ -20,8 +20,8 @@ cursor = conn.cursor()
 for i, row in enumerate(data):
     cursor.execute(
         """
-        INSERT INTO waterings (id, plant_id, month, frequency, amount, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO waterings (id, plant_id, month, frequency, amount, humidity_when_dry, humidity_when_watered, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             i + 1,
@@ -29,6 +29,8 @@ for i, row in enumerate(data):
             row["month"],
             row["frequency"],
             row["quantity"],
+            row["humidity_when_dry"],
+            row["humidity_when_watered"],
             datetime.now(),
             datetime.now(),
         ),

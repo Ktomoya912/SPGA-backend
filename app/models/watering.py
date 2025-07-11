@@ -14,6 +14,13 @@ class WateringBase(db.BaseModel):
     month: str = Field(description="対象月")
     frequency: str = Field(description="水やり頻度")
     amount: str = Field(description="水やり量")
+    humidity_when_dry: int = Field(
+        description="乾燥時の湿度",
+        default=-1,)
+    humidity_when_watered: int = Field(
+        description="水やり時の湿度",
+        default=2000,
+    )
 
 
 class Watering(WateringBase, table=True):
