@@ -5,9 +5,9 @@ from sqlmodel import Field, Relationship
 from app import db
 
 if TYPE_CHECKING:
-    from app.models.registed import Registed
-    from app.models.notification_history import NotificationHistory 
     from app.models.device import Device
+    from app.models.notification_history import NotificationHistory
+    from app.models.registed import Registed
 
 
 class UserBase(db.BaseModel):

@@ -1,12 +1,11 @@
-from typing import TYPE_CHECKING, Optional
 from datetime import datetime
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship
 
 from app import db
 
 if TYPE_CHECKING:
-    from app.models.device import Device
     from app.models.plant import Plant
     from app.models.user import User
 
@@ -26,20 +25,10 @@ class NotificationHistoryBase(db.BaseModel):
         foreign_key="plants.id",
     )
     notification_type: str = Field(
-        description="通知タイプ（watering, reminder等）",
-        default="watering"
+        description="通知タイプ（watering, reminder等）", default="watering"
     )
-    message: str = Field(
-        description="通知メッセージ内容"
-    )
-    sent_at: datetime = Field(
-        description="送信日時",
-        default_factory=datetime.now
-    )
-    last_flg: bool = Field(
-        description="最新フラグ, Trueの場合は最新の通知",
-        default=True,
-    )
+    message: str = Field(description="通知メッセージ内容")
+    sent_at: datetime = Field(description="送信日時", default_factory=datetime.now)
 
 
 class NotificationHistory(NotificationHistoryBase, table=True):

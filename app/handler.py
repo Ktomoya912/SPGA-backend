@@ -1,165 +1,95 @@
+import logging
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from linebot.v3.messaging import MessagingApi, PushMessageRequest, TextMessage
-from sqlmodel import Session, select
+from sqlmodel import Session, desc, select
 
 from app import db, models
 
+logger = logging.getLogger(__name__)
 
-# def handler(line_bot_api: MessagingApi):
-def handler():
-    print("水やりチェックシステムを開始します...")
+
+def handler(line_bot_api: MessagingApi):
+    logger.info("水やりチェックシステムを開始します...")
 
     # 1秒もしくは30分ごとに湿度を取る。
     # 登録テーブルからすべてのデータを取る。
-    # register_plant()
-    # show_available_models()
-    # show_database_tables()
     with Session(db.engine) as session:
-        # 初回実行時にデータを取得
-        # user_plants = get_user_registed_plants(session, "U197b8687c1c426392c2d64b9bf2fd89f")
-        watering_data = get_watering_data(session)
-        users_list = get_users(session)
-        last_data_update = datetime.now() - timedelta(
-            hours=2
-        )  # 最後のデータ更新時間を記録
-
         try:
             while True:
-                print(
-                    f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 水やりチェックを開始します..."
-                )
+                logger.info("水やりチェックを開始します...")
                 current_time = datetime.now()
+                users_list = get_users(session)
                 current_month = current_time.month
                 current_hour = current_time.hour
-                # current_minute = current_time.minute
                 if current_hour < 8 or current_hour > 21:
-                    print(
-                        f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] 現在の時間は水やりチェックの時間外です。スキップします。"
+                    logger.info(
+                        "現在の時間は水やりチェックの時間外です。スキップします。"
                     )
                     time.sleep(600)
 
-                time_diff = current_time - last_data_update
-                if time_diff.total_seconds() >= 3600:  # 3600秒 = 1時間
-                    print(
-                        f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] 1時間経過 - データを再取得中..."
-                    )
-                    watering_data = get_watering_data(session)
-                    users_list = get_users(session)
-                    last_data_update = current_time
-
-                    # 月の文字列から数字を抽出して比較
-                print("データ取得終了")
-                watering_data_list = []
-                # print(watering_data)
-                print("水やりデータ:の月で絞り込みを開始します...")
-                for wd in watering_data:
-                    try:
-                        # '1月' -> 1, '12月' -> 12 のように変換
-                        month_str = wd.month.replace("月", "")
-                        month_num = int(month_str)
-                        if month_num == current_month:
-                            watering_data_list.append(wd)
-                    except (ValueError, AttributeError):
-                        # 変換に失敗した場合はスキップ
-                        print(f"⚠️ 月データの変換に失敗: {wd.month}")
-                        continue
-                # print(watering_data_list)
-                print("水やりデータ:の月で絞り込みを終了します...")
-
-                print("各ユーザの処理を開始します...")
-                # print(users_list)
                 for user in users_list:
                     # ユーザーの登録済み植物を取得
-                    print(
-                        f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] ユーザー {user.id} の水やりチェックを開始します..."
-                    )
-                    registed_plants = get_user_registed_plants(session, user.id)
-                    notification_history = get_notification_history(session, user.id)
-                    # print(f"通知履歴: {notification_history}")
-                    for registed in registed_plants:
-                        # 植物の判定
-                        # if (直近の通知が今日ならばスキップ)
+                    logger.info(f"ユーザー {user.id} の水やりチェックを開始します...")
+                    for registed in user.registed_plants:
+                        latest_notification = get_latest_notification(
+                            session, user.id, registed.plant_id
+                        )
                         if (
-                            notification_history
-                            and notification_history.sent_at
+                            latest_notification
+                            and latest_notification.sent_at
                             > current_time.replace(hour=0, minute=0, second=0)
                         ):
-                            print(
-                                f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] {user.id} の植物 {registed.plant_id} は最近通知済みのためスキップ"
+                            logger.info(
+                                f"{user.id} の植物 {registed.plant_id} は最近通知済みのためスキップ"
                             )
                             continue
-                        plant_watering_data = next(
-                            (
-                                wd
-                                for wd in watering_data_list
-                                if wd.plant_id == registed.plant_id
-                            ),
-                            None,
+                        plant_watering_data = get_watering_data(
+                            session, current_month, registed.plant_id
                         )
-                        watering_plant_ids = [wd.plant_id for wd in watering_data_list]
-                        print(
-                            f"🔍 デバッグ: watering_data_listのplant_id一覧: {watering_plant_ids}"
-                        )
-                        print(
+                        logger.debug(
                             f"🔍 デバッグ: 検索対象のregisted.plant_id: {registed.plant_id}"
                         )
                         humidity = get_humidity(registed.device_id)  # 湿度データを取得
-                        last_watering_date = None
-                        if notification_history:
-                            last_watering_date = notification_history.sent_at
                         if check_watering_schedule(
                             plant_watering_data,
                             current_time,
                             humidity,
-                            last_watering_date,
+                            last_watering_date=(
+                                latest_notification.sent_at
+                                if latest_notification
+                                else None
+                            ),
                         ):
+                            notification = record_notification_history(
+                                session,
+                                user.id,
+                                registed.plant,
+                                plant_watering_data,
+                            )
                             # line bot api 挿入用の場所
-                            # line_bot_api.push_message_with_http_info(
-                            #     push_message_request=PushMessageRequest(
-                            #         to=user.id,
-                            #         messages=[
-                            #             TextMessage(
-                            #                 text=f"{registed.plant.name_jp} ({registed.plant.id}) の水やりが必要です。"
-                            #             ),
-                            #         ],
-                            #     )
-                            # )
-                            # 通知履歴を記録
-                            print("通知を記録")
-                            record_notification_history(
-                                session, 
-                                user.id, 
-                                registed.plant_id, 
-                                registed.plant.name_jp, 
-                                current_time
+                            line_bot_api.push_message_with_http_info(
+                                push_message_request=PushMessageRequest(
+                                    to=user.id,
+                                    messages=[
+                                        TextMessage(text=notification.message),
+                                    ],
+                                )
                             )
 
                 # 1分間待機
-                print(
-                    f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] 60秒間待機します..."
-                )
+                logger.info("60秒間待機します...")
                 time.sleep(60)
 
         except KeyboardInterrupt:
-            print("\n水やりチェックシステムを停止しました")
+            logger.info("\n水やりチェックシステムを停止しました")
         except Exception as e:
-            print(f"エラーが発生しました: {e}")
+            logger.info(f"エラーが発生しました: {e}")
             import traceback
 
             traceback.print_exc()
-    pass
-
-
-def get_user_registed_plants(session: Session, user_id: str):
-    """特定のユーザーの登録済み植物を取得"""
-    registed_plants = session.exec(
-        select(models.Registed).where(models.Registed.user_id == user_id)
-    ).all()
-
-    return registed_plants
 
 
 def get_users(session: Session):
@@ -169,26 +99,30 @@ def get_users(session: Session):
     return users
 
 
-def get_watering_data(session: Session):
-    """水やり頻度データを取得"""
-    watering_data = session.exec(select(models.Watering)).all()
-
+def get_watering_data(session: Session, month: int, plant_id: int):
+    """指定した植物、指定した月の水やり頻度データを取得"""
+    watering_data = session.exec(
+        select(models.Watering).where(
+            models.Watering.plant_id == plant_id,
+            models.Watering.month == f"{month}",
+        )
+    ).first()
+    logger.info(f"取得した水やりデータ: {watering_data}")
     return watering_data
 
 
-def get_notification_history(session: Session, user_id: str):
-    """特定のユーザーの通知履歴を取得"""
-    notification_history = session.exec(
-        select(models.NotificationHistory).where(
-            (models.NotificationHistory.user_id == user_id),
-            (models.NotificationHistory.last_flg == True),
+def get_latest_notification(session: Session, user_id: str, plant_id: int):
+    """特定のユーザーと植物の最新の通知履歴を取得"""
+    notification = session.exec(
+        select(models.NotificationHistory)
+        .where(
+            models.NotificationHistory.user_id == user_id,
+            models.NotificationHistory.plant_id == plant_id,
         )
-    ).all()
+        .order_by(desc(models.NotificationHistory.sent_at))
+    ).first()
 
-    if notification_history:
-        return notification_history[-1]  # 最新の通知履歴
-    else:
-        return None
+    return notification
 
 
 def get_humidity(device_id: int):
@@ -199,19 +133,22 @@ def get_humidity(device_id: int):
 
 
 def check_watering_schedule(
-    watering_data, current_time, humidity=None, last_watering_date=None
+    watering_data: models.Watering,
+    current_time: datetime,
+    humidity: float = None,
+    last_watering_date: datetime = None,
 ):
     """水やりが必要かどうかを判定"""
-    print(watering_data)
+    logger.info(watering_data)
     frequency = watering_data.frequency.lower()
-    print(f"Frequency: {frequency}")
+    logger.info(f"Frequency: {frequency}")
 
     has_number = re.search(r"\d+", frequency)
 
     if has_number:
         # 数字がある場合：前回水をあげた日付との比較
         if last_watering_date is None:
-            print("    ⚠️ 前回の水やり日付が不明です")
+            logger.warning("    ⚠️ 前回の水やり日付が不明です")
             return True  # 初回は水やりを推奨
 
         # 数字を抽出
@@ -224,14 +161,14 @@ def check_watering_schedule(
                 current_time.date() - last_watering_date.date()
             ).days
 
-            print(
+            logger.info(
                 f"    📅 前回の水やりから{days_since_last_watering}日経過（目安: {target_days}日に1回）"
             )
 
             if days_since_last_watering >= target_days:
                 return True
             else:
-                print(
+                logger.info(
                     f"    ⏳ あと{target_days - days_since_last_watering}日後に水やり予定"
                 )
                 return False
@@ -240,54 +177,47 @@ def check_watering_schedule(
         # 数字がない場合：湿度比較
         humidity_when_dry = watering_data.humidity_when_dry
         if humidity is None:
-            print("⚠️ 湿度データが取得できません")
+            logger.warning("⚠️ 湿度データが取得できません")
             return False
 
-        print(f"    💧 現在の湿度: {humidity}% (乾燥基準: {humidity_when_dry}%)")
+        logger.info(f"    💧 現在の湿度: {humidity}% (乾燥基準: {humidity_when_dry}%)")
 
         if humidity <= humidity_when_dry:
-            print("    ✅ 土が乾燥しています")
+            logger.info("    ✅ 土が乾燥しています")
             return True
         else:
-            print("    🚫 まだ湿っています")
+            logger.info("    🚫 まだ湿っています")
             return False
 
     return False
 
-def record_notification_history(session: Session, user_id: str, plant_id: int, plant_name: str, current_time: datetime):
+
+def record_notification_history(
+    session: Session,
+    user_id: str,
+    plant: models.Plant,
+    watering_data: models.Watering,
+):
     """通知履歴を記録する"""
     try:
-        # 既存の通知履歴のlast_flgをFalseに更新
-        existing_notifications = session.exec(
-            select(models.NotificationHistory).where(
-                models.NotificationHistory.user_id == user_id,
-                models.NotificationHistory.plant_id == plant_id,
-                models.NotificationHistory.last_flg == True
-            )
-        ).all()
-        
-        for existing in existing_notifications:
-            existing.last_flg = False
-        
+
         # 新しい通知履歴を作成
         new_notification = models.NotificationHistory(
             user_id=user_id,
-            plant_id=plant_id,
+            plant_id=plant.id,
             notification_type="watering",
-            message=f"{plant_name}の水やりが必要です",
-            sent_at=current_time,
-            last_flg=True
+            message=f"{plant.name_jp}の水やりが必要です。\n水やり頻度: {watering_data.frequency}\n水やり量: {watering_data.amount}",
         )
         session.add(new_notification)
         session.commit()
-        
-        print(f"✅ 通知履歴を記録しました: {user_id} -> {plant_name} ({current_time.strftime('%Y-%m-%d %H:%M:%S')})")
-        return True
-        
+
+        logger.info(f"✅ 通知履歴を記録しました: {user_id} -> {plant.name_jp}")
+        return new_notification
     except Exception as notification_error:
-        print(f"⚠️ 通知履歴の記録に失敗しました: {notification_error}")
+        logger.error(f"⚠️ 通知履歴の記録に失敗しました: {notification_error}")
         # 通知履歴の記録に失敗してもメイン処理は継続
         return False
+
 
 if __name__ == "__main__":
     handler()
