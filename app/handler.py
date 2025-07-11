@@ -103,8 +103,8 @@ def handler():
                                 # )
                                 
                 # 1分間待機
-                print(f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] 6秒間待機します...")
-                time.sleep(6)  # 60秒 = 1分
+                print(f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] 60秒間待機します...")
+                time.sleep(60)
                 
         except KeyboardInterrupt:
             print("\n水やりチェックシステムを停止しました")
@@ -149,7 +149,9 @@ def get_watering_data(session: Session):
 def get_notification_history(session: Session, user_id: str):
     """特定のユーザーの通知履歴を取得"""
     notification_history = session.exec(
-        select(models.NotificationHistory).where(models.NotificationHistory.user_id == user_id and models.NotificationHistory.last_flg == True)
+        select(models.NotificationHistory).where(
+            (models.NotificationHistory.user_id == user_id) & (models.NotificationHistory.last_flg == True)
+        )
     ).all()
 
     if notification_history:
