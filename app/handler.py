@@ -8,7 +8,8 @@ from sqlmodel import Session, select
 from app import db, models
 
 
-def handler(line_bot_api: MessagingApi):
+# def handler(line_bot_api: MessagingApi):
+def handler():
     print("水やりチェックシステムを開始します...")
 
     # 1秒もしくは30分ごとに湿度を取る。
@@ -69,7 +70,7 @@ def handler(line_bot_api: MessagingApi):
                 print("水やりデータ:の月で絞り込みを終了します...")
 
                 print("各ユーザの処理を開始します...")
-                print(users_list)
+                # print(users_list)
                 for user in users_list:
                     # ユーザーの登録済み植物を取得
                     print(
@@ -77,6 +78,7 @@ def handler(line_bot_api: MessagingApi):
                     )
                     registed_plants = get_user_registed_plants(session, user.id)
                     notification_history = get_notification_history(session, user.id)
+                    # print(f"通知履歴: {notification_history}")
                     for registed in registed_plants:
                         # 植物の判定
                         # if (直近の通知が今日ならばスキップ)
@@ -88,6 +90,7 @@ def handler(line_bot_api: MessagingApi):
                             print(
                                 f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] {user.id} の植物 {registed.plant_id} は最近通知済みのためスキップ"
                             )
+                            continue
                         plant_watering_data = next(
                             (
                                 wd
@@ -114,15 +117,24 @@ def handler(line_bot_api: MessagingApi):
                             last_watering_date,
                         ):
                             # line bot api 挿入用の場所
-                            line_bot_api.push_message_with_http_info(
-                                push_message_request=PushMessageRequest(
-                                    to=user.id,
-                                    messages=[
-                                        TextMessage(
-                                            text=f"{registed.plant.name_jp} ({registed.plant.id}) の水やりが必要です。"
-                                        ),
-                                    ],
-                                )
+                            # line_bot_api.push_message_with_http_info(
+                            #     push_message_request=PushMessageRequest(
+                            #         to=user.id,
+                            #         messages=[
+                            #             TextMessage(
+                            #                 text=f"{registed.plant.name_jp} ({registed.plant.id}) の水やりが必要です。"
+                            #             ),
+                            #         ],
+                            #     )
+                            # )
+                            # 通知履歴を記録
+                            print("通知を記録")
+                            record_notification_history(
+                                session, 
+                                user.id, 
+                                registed.plant_id, 
+                                registed.plant.name_jp, 
+                                current_time
                             )
 
                 # 1分間待機
@@ -138,14 +150,6 @@ def handler(line_bot_api: MessagingApi):
             import traceback
 
             traceback.print_exc()
-
-    # 登録データの植物データの水やりと一致するならば水やりの通知を行う。
-    # line_bot_api.push_message_with_http_info(
-    #     push_message_request=PushMessageRequest(
-    #         to=event.source.user_id,
-    #         messages=[TextMessage(text=f"予測結果: (ID: {result})")],
-    #     )
-    # )
     pass
 
 
@@ -239,15 +243,6 @@ def check_watering_schedule(
             print("⚠️ 湿度データが取得できません")
             return False
 
-        # 湿度の閾値を設定（実際の値に応じて調整）
-        # 「土の中も乾燥してから」の場合、より低い湿度が必要
-        # if "土の中も乾燥してから" in frequency or "土の中もしっかり乾燥してから" in frequency:
-        #     humidity_when_dry = 30  # 土の中も乾燥する湿度レベル
-        # elif "土の表面が乾燥してから" in frequency:
-        #     humidity_when_dry = 40  # 土の表面が乾燥する湿度レベル
-        # else:
-        #     humidity_when_dry = 35  # デフォルト値
-
         print(f"    💧 現在の湿度: {humidity}% (乾燥基準: {humidity_when_dry}%)")
 
         if humidity <= humidity_when_dry:
@@ -259,137 +254,40 @@ def check_watering_schedule(
 
     return False
 
-
-# def show_available_models():
-#     """利用可能なモデルの一覧を表示"""
-#     print("=== 利用可能なモデル一覧 ===")
-
-#     # modelsモジュールの属性を取得
-#     import inspect
-#     from app import models
-
-#     # modelsモジュール内のクラスを取得
-#     for name, obj in inspect.getmembers(models):
-#         if inspect.isclass(obj):
-#             print(f"- models.{name}")
-#             if hasattr(obj, '__tablename__'):
-#                 print(f"  テーブル名: {obj.__tablename__}")
-#             print(f"  モジュール: {obj.__module__}")
-#             print()
-
-# def register_plant():
-#     """植物を登録する"""
-
-#     # 登録データ
-#     plant_id = 1385937
-#     user_id = "U197b8687c1c426392c2d64b9bf2fd89f"
-#     device_id = 0
-
-#     print(f"植物登録を開始します...")
-#     print(f"植物ID: {plant_id}")
-#     print(f"ユーザーID: {user_id}")
-#     print(f"デバイスID: {device_id}")
-
-#     try:
-#         with Session(db.engine) as session:
-#             # まず植物が存在するかチェック
-#             plant = session.exec(
-#                 select(models.Plant).where(models.Plant.id == plant_id)
-#             ).first()
-
-#             if plant is None:
-#                 print(f"❌ エラー: 植物ID {plant_id} は存在しません")
-#                 return False
-
-#             print(f"植物が見つかりました: {plant.name_jp} ({plant.name_en})")
-
-#             # ユーザーが存在するかチェック（存在しない場合は作成）
-#             user = session.exec(
-#                 select(models.User).where(models.User.id == user_id)
-#             ).first()
-
-#             if user is None:
-#                 print(f"ユーザーが見つかりません。新しいユーザーを作成します...")
-#                 new_user = models.User(
-#                     id=user_id,
-#                     delete_mode=False,
-#                     current_predict=None
-#                 )
-#                 session.add(new_user)
-#                 session.commit()
-#                 print(f"ユーザーを作成しました: {user_id}")
-#             else:
-#                 print(f"ユーザーが見つかりました: {user_id}")
-
-#             # 植物を登録
-#             result = plant_regist(session, plant_id, user_id, device_id)
-
-#             if result:
-#                 print(f"✅ 植物の登録が成功しました！")
-#                 print(f"植物: {plant.name_jp} (ID: {plant_id})")
-#                 print(f"ユーザー: {user_id}")
-#                 print(f"デバイス: {device_id}")
-#                 return True
-#             else:
-#                 print(f"❌ 植物は既に登録済みです")
-#                 return False
-
-#     except Exception as e:
-#         print(f"❌ エラーが発生しました: {e}")
-#         import traceback
-#         traceback.print_exc()
-#         return False
-
-# def show_database_tables():
-#     """データベースのテーブル一覧を表示"""
-#     print("=== データベースのテーブル一覧 ===")
-
-#     # SQLiteを直接使用してテーブル一覧を取得
-#     db_path = Path(__file__).parent.parent / "app.db"
-
-#     if not db_path.exists():
-#         print("❌ データベースファイルが存在しません")
-#         return
-
-#     try:
-#         conn = sqlite3.connect(db_path)
-#         cursor = conn.cursor()
-
-#         # テーブル一覧を取得
-#         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-#         tables = cursor.fetchall()
-
-#         print(f"テーブル数: {len(tables)}")
-#         for table in tables:
-#             table_name = table[0]
-#             print(f"- {table_name}")
-
-#             # 各テーブルのレコード数を取得
-#             cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-#             count = cursor.fetchone()[0]
-#             print(f"  レコード数: {count}")
-
-#             # テーブルの構造を表示
-#             cursor.execute(f"PRAGMA table_info({table_name})")
-#             columns = cursor.fetchall()
-#             print(f"  列: {[col[1] for col in columns]}")
-#             print()
-
-#         conn.close()
-
-#     except Exception as e:
-#         print(f"エラーが発生しました: {e}")
+def record_notification_history(session: Session, user_id: str, plant_id: int, plant_name: str, current_time: datetime):
+    """通知履歴を記録する"""
+    try:
+        # 既存の通知履歴のlast_flgをFalseに更新
+        existing_notifications = session.exec(
+            select(models.NotificationHistory).where(
+                models.NotificationHistory.user_id == user_id,
+                models.NotificationHistory.plant_id == plant_id,
+                models.NotificationHistory.last_flg == True
+            )
+        ).all()
+        
+        for existing in existing_notifications:
+            existing.last_flg = False
+        
+        # 新しい通知履歴を作成
+        new_notification = models.NotificationHistory(
+            user_id=user_id,
+            plant_id=plant_id,
+            notification_type="watering",
+            message=f"{plant_name}の水やりが必要です",
+            sent_at=current_time,
+            last_flg=True
+        )
+        session.add(new_notification)
+        session.commit()
+        
+        print(f"✅ 通知履歴を記録しました: {user_id} -> {plant_name} ({current_time.strftime('%Y-%m-%d %H:%M:%S')})")
+        return True
+        
+    except Exception as notification_error:
+        print(f"⚠️ 通知履歴の記録に失敗しました: {notification_error}")
+        # 通知履歴の記録に失敗してもメイン処理は継続
+        return False
 
 if __name__ == "__main__":
     handler()
-
-# def get_all_registed_with_details():
-#     """全ての登録データを植物詳細と共に取得"""
-#     with Session(db.engine) as session:
-#         # JOINを使用して植物データも一緒に取得
-#         registed_with_plants = session.exec(
-#             select(models.Registed, models.Plant)
-#             .join(models.Plant, models.Registed.plant_id == models.Plant.id)
-#         ).all()
-
-#         return registed_with_plants
