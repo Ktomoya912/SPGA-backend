@@ -218,7 +218,7 @@ def show_all_test_data():
         users = session.exec(select(models.User)).all()
         print(f"\n👥 ユーザー数: {len(users)}")
         for user in users:
-            print(f"  {user.id}: {user.name}")
+            print(f"  {user.id}: {user.id}")
             
             # 植物登録情報
             registrations = session.exec(
