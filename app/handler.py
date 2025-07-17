@@ -5,20 +5,20 @@ from datetime import datetime
 
 from linebot.v3.messaging import MessagingApi, PushMessageRequest, TextMessage
 from sqlmodel import Session, desc, select
-
+import threading
 from app import db, models
 
 logger = logging.getLogger(__name__)
 
 
-def handler(line_bot_api: MessagingApi):
+def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
     logger.info("水やりチェックシステムを開始します...")
 
     # 1秒もしくは30分ごとに湿度を取る。
     # 登録テーブルからすべてのデータを取る。
     with Session(db.engine) as session:
         try:
-            while True:
+            while not stop_event.is_set():
                 logger.info("水やりチェックを開始します...")
                 current_time = datetime.now()
                 users_list = get_users(session)
@@ -82,9 +82,6 @@ def handler(line_bot_api: MessagingApi):
                 # 1分間待機
                 logger.info("60秒間待機します...")
                 time.sleep(60)
-
-        except KeyboardInterrupt:
-            logger.info("\n水やりチェックシステムを停止しました")
         except Exception as e:
             logger.info(f"エラーが発生しました: {e}")
             import traceback
