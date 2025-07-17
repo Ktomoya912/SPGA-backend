@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
 
@@ -24,13 +25,18 @@ from app.ai import predict_minimal
 from app.crud.utils import get_create_user, plant_regist
 from app.handler import handler as watch_handler
 
+stop_event = threading.Event()
+
 
 async def lifespan(app: FastAPI):
     db.create_db_and_tables()
     executor = ThreadPoolExecutor()
-    executor.submit(watch_handler, line_bot_api)
-    yield
-    executor.shutdown(wait=True)
+    executor.submit(watch_handler, line_bot_api, stop_event)
+    try:
+        yield
+    finally:
+        stop_event.set()
+        executor.shutdown(wait=True)
 
 
 load_dotenv()
