@@ -203,6 +203,9 @@ def check_watering_effectiveness(
         .order_by(desc(models.NotificationHistory.sent_at))
     ).first()
 
+    if not latest_notification:
+        return None  # 判定できない
+
     if latest_notification.notification_type != "watering":
         logger.info(
             f"最新の通知は水やりではありません: {latest_notification.notification_type}"
@@ -213,9 +216,6 @@ def check_watering_effectiveness(
         # 湿度の変化が100以内なら効果なし
         logger.info("湿度の変化が100以内のため、効果なしと判定")
         return None
-
-    if not latest_notification:
-        return None  # 判定できない
 
     # 前回の湿度データを取得する代替手段を実装
     # 現在はシンプルに湿度のしきい値をもとに効果を判定
