@@ -35,6 +35,7 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                 for user in users_list:
                     # ユーザーの登録済み植物を取得
                     logger.info(f"ユーザー {user.id} の水やりチェックを開始します...")
+                    logger.info(f"登録済み植物: {user.registed_plants}")
                     for registed in user.registed_plants:
                         latest_notification = get_latest_notification(
                             session, user.id, registed.plant_id
