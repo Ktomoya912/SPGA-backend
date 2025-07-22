@@ -64,6 +64,16 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                                 notification_type="watering_feedback",
                                 message=f"{registed.plant.name_jp}: {effectiveness['message']}",
                             )
+                            line_bot_api.push_message_with_http_info(
+                                push_message_request=PushMessageRequest(
+                                    to=user.id,
+                                    messages=[
+                                        TextMessage(
+                                            text=effectiveness_notification.message
+                                        ),
+                                    ],
+                                )
+                            )
                             session.add(effectiveness_notification)
                             session.commit()
 
