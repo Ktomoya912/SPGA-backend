@@ -43,23 +43,10 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                         latest_notification = get_latest_notification(
                             session, user.id, registed.plant_id
                         )
-                        if (
-                            latest_notification
-                            and latest_notification.sent_at
-                            > current_time.replace(hour=0, minute=0, second=0)
-                        ):
-                            logger.info(
-                                f"{user.id} の植物 {registed.plant_id} は最近通知済みのためスキップ"
-                            )
-                            continue
                         plant_watering_data = get_watering_data(
                             session, current_month, registed.plant_id
                         )
-                        logger.debug(
-                            f"🔍 デバッグ: 検索対象のregisted.plant_id: {registed.plant_id}"
-                        )
                         humidity = get_humidity(registed.device_id)  # 湿度データを取得
-
                         # 水やり効果の判定（前回通知から湿度変化をチェック）
                         effectiveness = check_watering_effectiveness(
                             session,
@@ -68,7 +55,6 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                             humidity,
                             plant_watering_data,
                         )
-
                         if effectiveness:
                             logger.info(f"水やり効果判定: {effectiveness['status']}")
                             # 効果判定結果を記録
@@ -80,6 +66,20 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                             )
                             session.add(effectiveness_notification)
                             session.commit()
+
+                        if (
+                            latest_notification
+                            and latest_notification.sent_at
+                            > current_time.replace(hour=0, minute=0, second=0)
+                        ):
+                            logger.info(
+                                f"{user.id} の植物 {registed.plant_id} は最近通知済みのためスキップ"
+                            )
+                            continue
+
+                        logger.debug(
+                            f"🔍 デバッグ: 検索対象のregisted.plant_id: {registed.plant_id}"
+                        )
 
                         # 最新の水やり履歴を取得（通知履歴を使用）
                         latest_watering = get_latest_notification(
