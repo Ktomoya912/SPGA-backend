@@ -197,10 +197,15 @@ def check_watering_effectiveness(
         .where(
             models.NotificationHistory.user_id == user_id,
             models.NotificationHistory.plant_id == plant_id,
-            models.NotificationHistory.notification_type == "watering",
         )
         .order_by(desc(models.NotificationHistory.sent_at))
     ).first()
+
+    if latest_notification.notification_type != "watering":
+        logger.info(
+            f"最新の通知は水やりではありません: {latest_notification.notification_type}"
+        )
+        return None
 
     if not latest_notification:
         return None  # 判定できない
