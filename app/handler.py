@@ -18,9 +18,10 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
 
     # 1秒もしくは30分ごとに湿度を取る。
     # 登録テーブルからすべてのデータを取る。
-    with Session(db.engine) as session:
-        try:
-            while not stop_event.is_set():
+
+    try:
+        while not stop_event.is_set():
+            with Session(db.engine) as session:
                 logger.info("水やりチェックを開始します...")
                 current_time = datetime.now()
                 users_list = get_users(session)
@@ -116,11 +117,11 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                         logger.info("水やりチェックシステムを停止します。")
                         return
                     time.sleep(1)
-        except Exception as e:
-            logger.info(f"エラーが発生しました: {e}")
-            import traceback
+    except Exception as e:
+        logger.info(f"エラーが発生しました: {e}")
+        import traceback
 
-            traceback.print_exc()
+        traceback.print_exc()
 
 
 def get_users(session: Session):
