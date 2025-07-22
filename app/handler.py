@@ -56,13 +56,36 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                             f"🔍 デバッグ: 検索対象のregisted.plant_id: {registed.plant_id}"
                         )
                         humidity = get_humidity(registed.device_id)  # 湿度データを取得
+                        
+                        # 水やり効果の判定（前回通知から湿度変化をチェック）
+                        effectiveness = check_watering_effectiveness(
+                            session, user.id, registed.plant_id, humidity, plant_watering_data
+                        )
+                        
+                        if effectiveness:
+                            logger.info(f"水やり効果判定: {effectiveness['status']}")
+                            # 効果判定結果を記録
+                            effectiveness_notification = models.NotificationHistory(
+                                user_id=user.id,
+                                plant_id=registed.plant_id,
+                                notification_type="watering_feedback",
+                                message=f"{registed.plant.name_jp}: {effectiveness['message']}",
+                            )
+                            session.add(effectiveness_notification)
+                            session.commit()
+                        
+                        # 最新の水やり履歴を取得（通知履歴を使用）
+                        latest_watering = get_latest_notification(
+                            session, user.id, registed.plant_id
+                        )
+                        
                         if check_watering_schedule(
                             plant_watering_data,
                             current_time,
                             humidity,
                             last_watering_date=(
-                                latest_notification.sent_at
-                                if latest_notification
+                                latest_watering.sent_at
+                                if latest_watering
                                 else None
                             ),
                         ):
@@ -141,6 +164,60 @@ def get_humidity(channel: int):
     return value
 
 
+def check_watering_effectiveness(
+    session: Session,
+    user_id: str,
+    plant_id: int,
+    current_humidity: int,
+    watering_data: models.Watering,
+):
+    """前回通知時の湿度と現在の湿度を比較して水やり効果を判定"""
+    # 最新の水やり通知履歴を取得
+    latest_notification = session.exec(
+        select(models.NotificationHistory)
+        .where(
+            models.NotificationHistory.user_id == user_id,
+            models.NotificationHistory.plant_id == plant_id,
+            models.NotificationHistory.notification_type == "watering",
+        )
+        .order_by(desc(models.NotificationHistory.sent_at))
+    ).first()
+    
+    if not latest_notification:
+        return None  # 判定できない
+    
+    # 前回の湿度データを取得する代替手段を実装
+    # 現在はシンプルに湿度のしきい値をもとに効果を判定
+    target_humidity = watering_data.humidity_when_watered
+    
+    logger.info(f"現在湿度: {current_humidity}, 目標湿度: {target_humidity}")
+    
+    # 目標湿度との差を計算
+    target_diff = abs(current_humidity - target_humidity)
+    
+    if target_diff <= 100:
+        # ちょうど良い範囲内
+        status = "ちょうど良い"
+        message = "水やりの量はちょうど良いです。"
+    elif current_humidity > target_humidity + 100:
+        # 湿度が低い（乾燥している） = 水量が少ない
+        status = "水量不足"
+        message = "今回は水量が少ないみたいです。次回はもう少し多めに水やりしてください。"
+    else:
+        # 湿度が高い（湿っている） = 水量が多い
+        status = "水量過多"
+        message = "水量が多いみたいです。次回は少し控えめに水やりしてください。"
+    
+    logger.info(f"水やり判定: {status} - {message}")
+    
+    return {
+        "status": status,
+        "message": message,
+        "current_humidity": current_humidity,
+        "target_humidity": target_humidity,
+    }
+
+
 def check_watering_schedule(
     watering_data: models.Watering,
     current_time: datetime,
@@ -209,13 +286,15 @@ def record_notification_history(
 ):
     """通知履歴を記録する"""
     try:
-
+        current_time = datetime.now()
+        
         # 新しい通知履歴を作成
         new_notification = models.NotificationHistory(
             user_id=user_id,
             plant_id=plant.id,
             notification_type="watering",
             message=f"{plant.name_jp}の水やりが必要です。\n水やり頻度: {watering_data.frequency}\n水やり量: {watering_data.amount}",
+            sent_at=current_time,
         )
         session.add(new_notification)
         session.commit()
