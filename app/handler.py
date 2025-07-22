@@ -1,13 +1,14 @@
 import logging
 import re
+import threading
 import time
 from datetime import datetime
 
+import spidev
 from linebot.v3.messaging import MessagingApi, PushMessageRequest, TextMessage
 from sqlmodel import Session, desc, select
-import threading
+
 from app import db, models
-import spidev
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                     time.sleep(600)
 
                 for user in users_list:
+                    session.refresh(user)
                     # ユーザーの登録済み植物を取得
                     logger.info(f"ユーザー {user.id} の水やりチェックを開始します...")
                     logger.info(f"登録済み植物: {user.registed_plants}")
@@ -56,12 +58,16 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                             f"🔍 デバッグ: 検索対象のregisted.plant_id: {registed.plant_id}"
                         )
                         humidity = get_humidity(registed.device_id)  # 湿度データを取得
-                        
+
                         # 水やり効果の判定（前回通知から湿度変化をチェック）
                         effectiveness = check_watering_effectiveness(
-                            session, user.id, registed.plant_id, humidity, plant_watering_data
+                            session,
+                            user.id,
+                            registed.plant_id,
+                            humidity,
+                            plant_watering_data,
                         )
-                        
+
                         if effectiveness:
                             logger.info(f"水やり効果判定: {effectiveness['status']}")
                             # 効果判定結果を記録
@@ -73,20 +79,18 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                             )
                             session.add(effectiveness_notification)
                             session.commit()
-                        
+
                         # 最新の水やり履歴を取得（通知履歴を使用）
                         latest_watering = get_latest_notification(
                             session, user.id, registed.plant_id
                         )
-                        
+
                         if check_watering_schedule(
                             plant_watering_data,
                             current_time,
                             humidity,
                             last_watering_date=(
-                                latest_watering.sent_at
-                                if latest_watering
-                                else None
+                                latest_watering.sent_at if latest_watering else None
                             ),
                         ):
                             notification = record_notification_history(
@@ -107,7 +111,11 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
 
                 # 1分間待機
                 logger.info("60秒間待機します...")
-                time.sleep(60)
+                for _ in range(60):
+                    if stop_event.is_set():
+                        logger.info("水やりチェックシステムを停止します。")
+                        return
+                    time.sleep(1)
         except Exception as e:
             logger.info(f"エラーが発生しました: {e}")
             import traceback
@@ -182,19 +190,19 @@ def check_watering_effectiveness(
         )
         .order_by(desc(models.NotificationHistory.sent_at))
     ).first()
-    
+
     if not latest_notification:
         return None  # 判定できない
-    
+
     # 前回の湿度データを取得する代替手段を実装
     # 現在はシンプルに湿度のしきい値をもとに効果を判定
     target_humidity = watering_data.humidity_when_watered
-    
+
     logger.info(f"現在湿度: {current_humidity}, 目標湿度: {target_humidity}")
-    
+
     # 目標湿度との差を計算
     target_diff = abs(current_humidity - target_humidity)
-    
+
     if target_diff <= 100:
         # ちょうど良い範囲内
         status = "ちょうど良い"
@@ -202,14 +210,16 @@ def check_watering_effectiveness(
     elif current_humidity > target_humidity + 100:
         # 湿度が低い（乾燥している） = 水量が少ない
         status = "水量不足"
-        message = "今回は水量が少ないみたいです。次回はもう少し多めに水やりしてください。"
+        message = (
+            "今回は水量が少ないみたいです。次回はもう少し多めに水やりしてください。"
+        )
     else:
         # 湿度が高い（湿っている） = 水量が多い
         status = "水量過多"
         message = "水量が多いみたいです。次回は少し控えめに水やりしてください。"
-    
+
     logger.info(f"水やり判定: {status} - {message}")
-    
+
     return {
         "status": status,
         "message": message,
@@ -287,7 +297,7 @@ def record_notification_history(
     """通知履歴を記録する"""
     try:
         current_time = datetime.now()
-        
+
         # 新しい通知履歴を作成
         new_notification = models.NotificationHistory(
             user_id=user_id,
