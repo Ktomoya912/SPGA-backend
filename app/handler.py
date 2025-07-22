@@ -63,6 +63,7 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                                 plant_id=registed.plant_id,
                                 notification_type="watering_feedback",
                                 message=f"{registed.plant.name_jp}: {effectiveness['message']}",
+                                humidity=humidity,
                             )
                             line_bot_api.push_message_with_http_info(
                                 push_message_request=PushMessageRequest(
@@ -109,6 +110,7 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                                 user.id,
                                 registed.plant,
                                 plant_watering_data,
+                                humidity,
                             )
                             # line bot api 挿入用の場所
                             line_bot_api.push_message_with_http_info(
@@ -205,6 +207,11 @@ def check_watering_effectiveness(
         logger.info(
             f"最新の通知は水やりではありません: {latest_notification.notification_type}"
         )
+        return None
+
+    if abs(current_humidity - latest_notification.humidity) <= 100:
+        # 湿度の変化が100以内なら効果なし
+        logger.info("湿度の変化が100以内のため、効果なしと判定")
         return None
 
     if not latest_notification:
@@ -309,6 +316,7 @@ def record_notification_history(
     user_id: str,
     plant: models.Plant,
     watering_data: models.Watering,
+    humidity: float = None,
 ):
     """通知履歴を記録する"""
     try:
@@ -321,6 +329,7 @@ def record_notification_history(
             notification_type="watering",
             message=f"{plant.name_jp}の水やりが必要です。\n水やり頻度: {watering_data.frequency}\n水やり量: {watering_data.amount}",
             sent_at=current_time,
+            humidity=humidity,
         )
         session.add(new_notification)
         session.commit()

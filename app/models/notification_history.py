@@ -29,6 +29,11 @@ class NotificationHistoryBase(db.BaseModel):
     )
     message: str = Field(description="通知メッセージ内容")
     sent_at: datetime = Field(description="送信日時", default_factory=datetime.now)
+    humidity: Optional[float] = Field(
+        default=None,
+        description="水やり量, 水やり通知の場合に使用される。",
+        nullable=True,
+    )
 
 
 class NotificationHistory(NotificationHistoryBase, table=True):
