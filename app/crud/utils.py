@@ -1,6 +1,10 @@
+import logging
+
 from sqlmodel import Session, select
 
 from app import models
+
+logger = logging.getLogger(__name__)
 
 
 def get_create_user(db: Session, user_id: str):
@@ -9,6 +13,7 @@ def get_create_user(db: Session, user_id: str):
         new_user = models.User(id=user_id)
         db.add(new_user)
         db.commit()
+        logger.info(f"Created new user: {new_user.id}")
         return new_user
     else:
         return user

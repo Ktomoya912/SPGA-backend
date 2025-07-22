@@ -151,9 +151,7 @@ def handle_message(event: MessageEvent):
                 user.current_predict = None
                 session.add(user)
                 session.commit()
-                
                 reply_text = "センサー番号を入力してください。（例：1, 2, 3...）"
-                
             elif "いいえ" in text or "no" == text.lower():
                 user.current_predict = None
                 session.add(user)
@@ -171,9 +169,10 @@ def handle_message(event: MessageEvent):
             # センサー番号の入力処理
             try:
                 device_id = int(text.strip())
-                
                 # 植物とデバイスを登録
-                if not plant_regist(session, user.awaiting_device_id, user.id, device_id):
+                if not plant_regist(
+                    session, user.awaiting_device_id, user.id, device_id
+                ):
                     reply_text = f"センサー番号 {device_id} は既に使用されているか、登録に失敗しました。\n別の番号を入力してください。"
                 else:
                     plant = session.exec(
@@ -181,14 +180,11 @@ def handle_message(event: MessageEvent):
                             models.Plant.id == user.awaiting_device_id
                         )
                     ).first()
-                    
                     # 状態をリセット
                     user.awaiting_device_id = 0
                     session.add(user)
                     session.commit()
-                    
                     reply_text = f"登録が完了しました。\nセンサー番号: {device_id}\n\nこの植物の注意事項\n{plant.description}"
-                    
             except ValueError:
                 reply_text = "有効な数字を入力してください。（例：1, 2, 3...）"
         else:
