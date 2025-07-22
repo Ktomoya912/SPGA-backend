@@ -193,20 +193,17 @@ def create_notification_history():
             ]
             
             for i, sent_date in enumerate(notification_dates):
-                is_last = (i == len(notification_dates) - 1)
-                
                 notification = models.NotificationHistory(
                     user_id=reg.user_id,
                     plant_id=reg.plant_id,
                     notification_type="watering",
                     message=f"{plant.name_jp}に水やりが必要です",
                     sent_at=sent_date,
-                    last_flg=is_last  # 最新のものだけTrue
                 )
                 session.add(notification)
                 created_count += 1
                 
-                if is_last:
+                if i == len(notification_dates) - 1:  # 最新のもの
                     print(f"  通知履歴: {reg.user_id} -> {plant.name_jp} (最新: {sent_date.strftime('%Y-%m-%d %H:%M')})")
         
         session.commit()
@@ -217,41 +214,42 @@ def show_all_test_data():
     print("\n=== 作成されたテストデータ ===")
     
     with Session(db.engine) as session:
+        # ユーザー情報
         users = session.exec(select(models.User)).all()
-        
+        print(f"\n👥 ユーザー数: {len(users)}")
         for user in users:
-            print(f"\n👤 ユーザー: {user.id}")
-            print(f"   予測結果: {user.current_predict}")
+            print(f"  {user.id}: {user.id}")
             
-            # デバイス情報
-            device = session.exec(
-                select(models.Device).where(models.Device.user_id == user.id)
-            ).first()
-            if device:
-                device_plant = session.get(models.Plant, device.plant_id)
-                print(f"   📱 デバイス: {device.name}")
-                print(f"      監視植物: {device_plant.name_jp}")
-            
-            # 登録済み植物
+            # 植物登録情報
             registrations = session.exec(
                 select(models.Registed).where(models.Registed.user_id == user.id)
             ).all()
             
             for reg in registrations:
                 plant = session.get(models.Plant, reg.plant_id)
-                print(f"   🌱 植物: {plant.name_jp}")
+                print(f"    📱 デバイス{reg.device_id} -> 🌱 {plant.name_jp} (ID: {plant.id})")
                 
                 # 最新の通知履歴
                 latest_notification = session.exec(
                     select(models.NotificationHistory).where(
                         models.NotificationHistory.user_id == user.id,
-                        models.NotificationHistory.plant_id == plant.id,
-                        models.NotificationHistory.last_flg == True
-                    )
+                        models.NotificationHistory.plant_id == plant.id
+                    ).order_by(models.NotificationHistory.sent_at.desc())
                 ).first()
                 
                 if latest_notification:
-                    print(f"      最新通知: {latest_notification.sent_at.strftime('%Y-%m-%d %H:%M')}")
+                    print(f"      📬 最新通知: {latest_notification.sent_at.strftime('%Y-%m-%d %H:%M')} - {latest_notification.message}")
+                
+                # 水やりデータ
+                watering_data = session.exec(
+                    select(models.Watering).where(
+                        models.Watering.plant_id == plant.id,
+                        models.Watering.month == str(datetime.now().month)
+                    )
+                ).first()
+                
+                if watering_data:
+                    print(f"      💧 水やり頻度: {watering_data.frequency} (湿度基準: {watering_data.humidity_when_dry}%)")
 
 def show_summary():
     """データの統計情報を表示"""

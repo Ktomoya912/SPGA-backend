@@ -7,6 +7,7 @@ from linebot.v3.messaging import MessagingApi, PushMessageRequest, TextMessage
 from sqlmodel import Session, desc, select
 import threading
 from app import db, models
+import spidev
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,8 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                 users_list = get_users(session)
                 current_month = current_time.month
                 current_hour = current_time.hour
-                if current_hour < 8 or current_hour > 21:
+                # if current_hour < 8 or current_hour > 21:
+                if False:
                     logger.info(
                         "現在の時間は水やりチェックの時間外です。スキップします。"
                     )
@@ -33,6 +35,7 @@ def handler(line_bot_api: MessagingApi, stop_event: threading.Event):
                 for user in users_list:
                     # ユーザーの登録済み植物を取得
                     logger.info(f"ユーザー {user.id} の水やりチェックを開始します...")
+                    logger.info(f"登録済み植物: {user.registed_plants}")
                     for registed in user.registed_plants:
                         latest_notification = get_latest_notification(
                             session, user.id, registed.plant_id
@@ -122,11 +125,20 @@ def get_latest_notification(session: Session, user_id: str, plant_id: int):
     return notification
 
 
-def get_humidity(device_id: int):
-    """湿度データを取得"""
-    # ここでは湿度データの取得方法を仮定しています。
-    # 実際の実装では、センサーやAPIから湿度データを取得する必要があります。
-    return 50  # 仮の湿度値
+def get_humidity(channel: int):
+    spi = spidev.SpiDev()
+    spi.open(0, 0)
+    spi.max_speed_hz = 1350000  # 1.35MHz
+    if not 0 <= channel <= 7:
+        raise ValueError("チャンネルは0〜7を指定してください")
+
+    # SPI通信で送る3バイト（MCP3008は10bit ADC）
+    cmd = [1, (8 + channel) << 4, 0]
+    response = spi.xfer2(cmd)
+
+    # 応答（10bit）を結合してアナログ値に変換
+    value = ((response[1] & 3) << 8) + response[2]
+    return value
 
 
 def check_watering_schedule(
@@ -179,7 +191,7 @@ def check_watering_schedule(
 
         logger.info(f"    💧 現在の湿度: {humidity}% (乾燥基準: {humidity_when_dry}%)")
 
-        if humidity <= humidity_when_dry:
+        if humidity >= humidity_when_dry:
             logger.info("    ✅ 土が乾燥しています")
             return True
         else:

@@ -23,6 +23,10 @@ class UserBase(db.BaseModel):
         default=False,
         description="削除モードかどうか",
     )
+    awaiting_device_id: int = Field(
+        description="デバイスID入力待ちフラグ", 
+        default=0
+    )
 
 
 class User(UserBase, table=True):
@@ -33,7 +37,4 @@ class User(UserBase, table=True):
     )
     notification_histories: list["NotificationHistory"] = Relationship(
         back_populates="user"
-    )
-    devices: list["Device"] = Relationship(
-        back_populates="user",
     )

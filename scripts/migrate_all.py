@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 load_dotenv()
 
@@ -58,3 +58,15 @@ if __name__ == "__main__":
             )
             session.add(watering)
         session.commit()
+        
+        # 登録済みの植物一覧表示
+        print("\n=== Plant一覧 ===")
+        plants = session.exec(select(models.Plant)).all()
+        for plant in plants:
+            print(f"ID: {plant.id}, JP: {plant.name_jp}, EN: {plant.name_en}")
+
+        # 登録済みの水やりデータ一覧表示
+        print("\n=== Watering一覧 ===")
+        waterings = session.exec(select(models.Watering)).all()
+        for watering in waterings:
+            print(f"PlantID: {watering.plant_id}, Month: {watering.month}, Freq: {watering.frequency}, Amount: {watering.amount}, Dry: {watering.humidity_when_dry}, Wet: {watering.humidity_when_watered}")

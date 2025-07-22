@@ -146,23 +146,51 @@ def handle_message(event: MessageEvent):
 
         elif user.current_predict:
             if "はい" in text or "yes" == text.lower():
-                if not plant_regist(session, user.current_predict, user.id):
-                    reply_text = "すでに登録済みの植物です。"
-                else:
-                    plant = session.exec(
-                        select(models.Plant).where(
-                            models.Plant.id == user.current_predict
-                        )
-                    ).first()
-                    reply_text = f"登録が完了しました。\n\nこの植物の注意事項\n{plant.description}"
+                # 植物登録を一時的に保留し、センサー番号の入力を要求
+                user.awaiting_device_id = user.current_predict
+                user.current_predict = None
+                session.add(user)
+                session.commit()
+                
+                reply_text = "センサー番号を入力してください。（例：1, 2, 3...）"
+                
             elif "いいえ" in text or "no" == text.lower():
+                user.current_predict = None
+                session.add(user)
+                session.commit()
                 reply_text = "登録をキャンセルしました。"
             else:
                 reply_text = (
                     "登録の確認ができませんでした。もう一度写真を送信してください。"
                 )
-            user.current_predict = None
-            session.commit()
+                user.current_predict = None
+                session.add(user)
+                session.commit()
+
+        elif user.awaiting_device_id:
+            # センサー番号の入力処理
+            try:
+                device_id = int(text.strip())
+                
+                # 植物とデバイスを登録
+                if not plant_regist(session, user.awaiting_device_id, user.id, device_id):
+                    reply_text = f"センサー番号 {device_id} は既に使用されているか、登録に失敗しました。\n別の番号を入力してください。"
+                else:
+                    plant = session.exec(
+                        select(models.Plant).where(
+                            models.Plant.id == user.awaiting_device_id
+                        )
+                    ).first()
+                    
+                    # 状態をリセット
+                    user.awaiting_device_id = 0
+                    session.add(user)
+                    session.commit()
+                    
+                    reply_text = f"登録が完了しました。\nセンサー番号: {device_id}\n\nこの植物の注意事項\n{plant.description}"
+                    
+            except ValueError:
+                reply_text = "有効な数字を入力してください。（例：1, 2, 3...）"
         else:
             reply_text = (
                 "画像を送信してください。植物の予測を行います。\n"
